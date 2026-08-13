@@ -1,0 +1,10 @@
+# Example inner-model wiring. Secrets stay in environment variables.
+base_model:
+  api_style: responses  # or chat
+  base_url_env: CLOSER_BASE_URL
+  api_key_env: CLOSER_API_KEY
+  model_env: CLOSER_MODEL
+  timeout_s: 180
+  max_retries: 3
+  temperature: null
+  reasoning_effort: high

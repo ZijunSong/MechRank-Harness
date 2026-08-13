@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mechrank-harness"
+version = "0.1.0"
+description = "MechRank-Harness: mechanistic ranking harness for ProteinGym-LLM"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "MechRank-Harness" }]
+dependencies = [
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "httpx>=0.27",
+    "tenacity>=9",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "networkx>=3.2",
+    "orjson>=3.10",
+    "rich>=13",
+    "typer>=0.12",
+    "pyyaml>=6",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+closer-run = "closer.cli:run_main"
+closer-server = "closer.cli:server_main"
+closer-eval-dev = "closer.cli:eval_dev_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: tests that call a real LLM endpoint",
+    "e2e: end-to-end server tests",
+]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

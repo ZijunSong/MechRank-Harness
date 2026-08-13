@@ -1,0 +1,5 @@
+{
+  "model": "closer-v1",
+  "instructions": "You will be given a wild-type protein sequence and a set of mutant sequences. Rank the mutants by their predicted effect on the assayed property, then output the ranking in the requested JSON format.",
+  "input": "**Protein:** DevLysozyme  (Gallus gallus)\n**Assay (what is measured):** Catalytic activity of hen egg-white lysozyme against Micrococcus peptidoglycan, reported as kcat/KM.\n**Higher experimental fitness = HIGHER value of the measured property.**\n\n**Wild-type sequence (20 aa):**\nKVFGRCELAAAMKRHGLDNY\n\n**10 candidate mutant sequences to rank:**\nM01: EVFGRCELAAAMKRHGLDNY\nM02: KAFGRCELAAAMKRHGLDNY\nM03: KVLGRCELAAAMKRHGLDNY\nM04: KVFARCELAAAMKRHGLDNY\nM05: KVFGKCELAAAMKRHGLDNY\nM06: KVFGRCELAAAMKRHGLDNY\nM07: KVFGRCELAAAMKAHGLDNY\nM08: KVFGRCELAAAMKRAGLDNY\nM09: KVFGRCELAAAMKRHGLDAY\nM10: KVFGRCELAAAMKRHGLDNF\n\nRank all 10 mutants from the one you predict has the MOST favorable effect on the assayed property (highest fitness) to the LEAST. Reason through the ordering, then on the last line output ONLY the JSON object:\n{\"ranking\": [\"M03\", \"M27\", ... all 10 ids, best to worst]}"
+}

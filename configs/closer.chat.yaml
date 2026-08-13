@@ -1,0 +1,83 @@
+project:
+  name: MechRank-Harness
+  version: 0.1.0
+
+base_model:
+  api_style: chat
+  base_url_env: CLOSER_BASE_URL
+  api_key_env: CLOSER_API_KEY
+  model_env: CLOSER_MODEL
+  timeout_s: 180
+  max_retries: 3
+  temperature: null
+  reasoning_effort: high
+  require_usage: false
+
+server:
+  model_id_env: CLOSER_SERVER_MODEL_ID
+  host_env: CLOSER_SERVER_HOST
+  port_env: CLOSER_SERVER_PORT
+  api_key_env: CLOSER_SERVER_API_KEY
+  default_model_id: closer-v1
+  default_host: 127.0.0.1
+  default_port: 8099
+  allow_dummy_api_key: true
+
+structured_output:
+  max_parse_repairs: 2
+  native_json_schema: true
+  json_only_fallback: true
+
+assay:
+  enabled: true
+
+evidence:
+  enabled: true
+  parallelism: 8
+  max_variants_per_call: 5
+  local_context_window: 10
+
+comparison:
+  group_size: 5
+  overlap: 2
+  pair_batch_size: 8
+  initial_rounds: 2
+
+ranking:
+  method: bradley_terry
+  l2_regularization: 0.001
+  confidence_clamp_min: 0.55
+  confidence_clamp_max: 0.95
+  weight_mode: neglog
+  tie_mode: ignore
+  max_optimize_iter: 500
+
+audit:
+  enabled: true
+  max_rounds: 3
+  max_items_per_round: 12
+  cycle_priority: 1.0
+  low_margin_priority: 1.0
+  evidence_conflict_priority: 1.0
+  epistasis_priority: 1.0
+  low_margin_threshold: 0.15
+  min_priority: 0.25
+  evidence_conflict_min_confidence: 0.75
+
+budget:
+  max_total_llm_calls: 80
+  max_total_input_tokens: 250000
+  max_total_output_tokens: 80000
+  hard_stop_on_exceed: true
+
+logging:
+  root: artifacts/runs
+  save_raw_provider_payloads: true
+
+ablation:
+  mutation_compiler: true
+  assay_contract: true
+  evidence_state: true
+  comparative_reasoning: true
+  global_solver: true
+  adaptive_audit: true

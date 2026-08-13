@@ -1,0 +1,21 @@
+**Protein:** DevLysozyme  (Gallus gallus)
+**Assay (what is measured):** Catalytic activity of hen egg-white lysozyme against Micrococcus peptidoglycan, reported as kcat/KM.
+**Higher experimental fitness = HIGHER value of the measured property.**
+
+**Wild-type sequence (20 aa):**
+KVFGRCELAAAMKRHGLDNY
+
+**10 candidate mutant sequences to rank:**
+M01: EVFGRCELAAAMKRHGLDNY
+M02: KAFGRCELAAAMKRHGLDNY
+M03: KVLGRCELAAAMKRHGLDNY
+M04: KVFARCELAAAMKRHGLDNY
+M05: KVFGKCELAAAMKRHGLDNY
+M06: KVFGRCELAAAMKRHGLDNY
+M07: KVFGRCELAAAMKAHGLDNY
+M08: KVFGRCELAAAMKRAGLDNY
+M09: KVFGRCELAAAMKRHGLDAY
+M10: KVFGRCELAAAMKRHGLDNF
+
+Rank all 10 mutants from the one you predict has the MOST favorable effect on the assayed property (highest fitness) to the LEAST. Reason through the ordering, then on the last line output ONLY the JSON object:
+{"ranking": ["M03", "M27", ... all 10 ids, best to worst]}

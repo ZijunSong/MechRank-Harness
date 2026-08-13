@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+artifacts/runs/
+artifacts/frozen/
+*.egg-info/
+dist/
+build/
+external/
+.coverage
+htmlcov/
