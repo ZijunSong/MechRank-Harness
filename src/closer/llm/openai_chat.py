@@ -61,6 +61,7 @@ class OpenAIChatClient(LLMClient):
         system: str,
         user: str,
         budget: BudgetManager | None = None,
+        max_output_tokens: int | None = None,
     ) -> tuple[BaseModel, LLMCallTrace]:
         last_error: Exception | None = None
         last_text = ""
@@ -77,6 +78,7 @@ class OpenAIChatClient(LLMClient):
                     system=current_system,
                     user=current_user,
                     budget=budget,
+                    max_output_tokens=max_output_tokens,
                     extra_body=extra_body,
                 )
             except ProviderError as exc:

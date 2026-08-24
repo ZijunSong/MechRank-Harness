@@ -10,8 +10,33 @@
 export PGLLM_CLOSER_BASE_URL=http://127.0.0.1:8099/v1
 export PGLLM_CLOSER_API_KEY=dummy-local-key
 pgllm-models --registry configs/pgllm_closer_model.json --models closer-v1
-pgllm-run --registry configs/pgllm_closer_model.json --models closer-v1 --sizes 50
-pgllm-score --models closer-v1 --sizes 50 --breakdown
+bash scripts/pgllm/run_pgllm.sh
+bash scripts/pgllm/status_pgllm.sh
+bash scripts/pgllm/score_pgllm.sh
 ```
+
+For bare OpenAI-compatible models (official PG-LLM direct path), set only
+`PGLLM_OPENAI_BASE_URL`, `PGLLM_OPENAI_API_KEY`, and `PGLLM_MODEL_ID`, then:
+
+```bash
+export PGLLM_REGISTRY=configs/pgllm_gpt55.json
+export PGLLM_MODELS=gpt55
+bash scripts/pgllm/run_openai_model.sh
+```
+
+If a run stalls because of transient API errors, resume with:
+
+```bash
+bash scripts/pgllm/resume_pgllm.sh
+```
+
+If the registry endpoint or model fingerprint changed, rerun affected cells with:
+
+```bash
+bash scripts/pgllm/rerun_pgllm.sh
+```
+
+Keep `PGLLM_CLOSER_BASE_URL` / server port stable during a canonical run, or
+assign a fresh `PGLLM_RUN_LABEL` so PG-LLM provenance checks stay valid.
 
 6. `scripts/validate_no_eval_tuning.py` checks the tree for obvious evaluation-label artifacts.

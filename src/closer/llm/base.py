@@ -38,6 +38,7 @@ class LLMClient(ABC):
         system: str,
         user: str,
         budget: BudgetManager | None = None,
+        max_output_tokens: int | None = None,
     ) -> tuple[BaseModel, LLMCallTrace]: ...
 
     async def aclose(self) -> None:

@@ -10,7 +10,11 @@ from closer.benchmark.pgllm_parser import parse_pgllm_prompt
 from closer.benchmark.pgllm_renderer import render_benchmark_response
 from closer.errors import BenchmarkParseError
 from closer.orchestrator.engine import CloserEngine
-from closer.server.request_parse import extract_system_user, is_connectivity_probe
+from closer.server.request_parse import (
+    extract_max_output_tokens,
+    extract_system_user,
+    is_connectivity_probe,
+)
 
 
 def responses_envelope(
@@ -76,6 +80,9 @@ async def handle_responses(engine: CloserEngine, body: dict[str, Any]) -> dict[s
         episode = parse_pgllm_prompt(user, system_prompt=system or None)
     except BenchmarkParseError:
         raise
-    result = await engine.run_episode(episode)
+    result = await engine.run_episode(
+        episode,
+        max_output_tokens=extract_max_output_tokens(body),
+    )
     text = render_benchmark_response(result.ranking, include_preamble=False)
     return responses_envelope(model=model_id, text=text, usage=result.usage)

@@ -1,7 +1,11 @@
 import pytest
 
 from closer.config import load_config
-from closer.server.request_parse import extract_system_user, is_connectivity_probe
+from closer.server.request_parse import (
+    extract_max_output_tokens,
+    extract_system_user,
+    is_connectivity_probe,
+)
 from closer.server.responses import handle_responses, responses_envelope
 
 
@@ -39,6 +43,13 @@ def test_extract_chat_messages():
 
 def test_probe_detection():
     assert is_connectivity_probe("You are a connectivity test.", "Reply with the single word: OK")
+
+
+def test_extract_max_output_tokens():
+    assert extract_max_output_tokens({"max_output_tokens": 4096}) == 4096
+    assert extract_max_output_tokens({"max_completion_tokens": 8192}) == 8192
+    assert extract_max_output_tokens({}) is None
+    assert extract_max_output_tokens({"max_output_tokens": 0}) is None
 
 
 def test_envelope_has_usage_and_output_text():

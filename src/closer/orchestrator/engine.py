@@ -46,7 +46,12 @@ class CloserEngine:
         )
         self.solver = GlobalRankSolver(config.ranking)
 
-    async def run_episode(self, episode: ProteinEpisode) -> CloserResult:
+    async def run_episode(
+        self,
+        episode: ProteinEpisode,
+        *,
+        max_output_tokens: int | None = None,
+    ) -> CloserResult:
         budget = BudgetManager(self.config.budget)
         episode_id = sha256_text(
             episode.protein_name + episode.assay_description + "".join(episode.variant_ids())
@@ -106,7 +111,13 @@ class CloserEngine:
             state.save_json(ep_dir / "evidence_states.json")
 
         if not self.config.ablation.comparative_reasoning:
-            result = await self._direct_rank_path(episode, state, budget, ep_dir)
+            result = await self._direct_rank_path(
+                episode,
+                state,
+                budget,
+                ep_dir,
+                max_output_tokens=max_output_tokens,
+            )
             return result
 
         graph = PreferenceGraph()
@@ -234,6 +245,8 @@ class CloserEngine:
         state: EpisodeEvidenceState,
         budget,
         ep_dir: Path | None,
+        *,
+        max_output_tokens: int | None = None,
     ) -> CloserResult:
         user = episode.raw_user_prompt or render_user_prompt(episode)
         extras = []
@@ -263,6 +276,7 @@ class CloserEngine:
             system=episode.system_prompt or SYSTEM_PROMPT,
             user=user,
             budget=budget,
+            max_output_tokens=max_output_tokens,
         )
         ranking = validate_final_ranking(episode, parsed.ranking)
         scores = {vid: float(len(ranking) - i) for i, vid in enumerate(ranking)}

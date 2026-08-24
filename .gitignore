@@ -5,11 +5,19 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .env
-artifacts/runs/
-artifacts/frozen/
 *.egg-info/
 dist/
 build/
 external/
 .coverage
 htmlcov/
+.DS_Store
+*.swp
+*.swo
+
+# Evaluation artifacts (keep placeholder only)
+artifacts/*
+!artifacts/.gitkeep
+
+# Generated per-machine registries
+configs/pgllm_active_model.json

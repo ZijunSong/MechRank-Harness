@@ -68,31 +68,73 @@ closer-run --input tests/fixtures/synthetic_n10.prompt.txt --config configs/clos
 | `CLOSER_SERVER_HOST` / `CLOSER_SERVER_PORT` | Outer server bind. |
 | `PGLLM_CLOSER_BASE_URL` | `http://127.0.0.1:8099/v1` |
 | `PGLLM_CLOSER_API_KEY` | Dummy local key is allowed. |
+| `PGLLM_OPENAI_BASE_URL` | Direct PG-LLM provider endpoint for bare-model eval. |
+| `PGLLM_OPENAI_API_KEY` | Direct PG-LLM provider key. |
+| `PGLLM_MODEL_ID` | Provider model id for direct eval (e.g. `gpt-5.5`). |
 
 ## ProteinGym-LLM
 
 ```bash
 bash scripts/pgllm/setup_pgllm.sh
+pgllm-data
 export PGLLM_CLOSER_BASE_URL=http://127.0.0.1:8099/v1
 export PGLLM_CLOSER_API_KEY=dummy-local-key
 pgllm-models --registry configs/pgllm_closer_model.json --models closer-v1
 ```
 
-Freeze before any official evaluation cell:
+### CLOSER harness eval (official path)
+
+Start the harness server, freeze config, then run the official PG-LLM workflow:
 
 ```bash
+closer-server --config configs/closer.pgllm.yaml --host 127.0.0.1 --port 8099
 python scripts/freeze_config.py \
   --config configs/closer.pgllm.yaml \
   --output artifacts/frozen/closer_v1_manifest.json
+bash scripts/pgllm/run_pgllm.sh
+bash scripts/pgllm/status_pgllm.sh
+bash scripts/pgllm/score_pgllm.sh
+bash scripts/pgllm/export_pgllm.sh
 ```
 
-Then, with CLOSER server running:
+Resume after transient API failures:
 
 ```bash
-pgllm-run --registry configs/pgllm_closer_model.json --models closer-v1 --sizes 50
-pgllm-status --models closer-v1 --sizes 50
-pgllm-score --models closer-v1 --sizes 50 --breakdown
-pgllm-export --models closer-v1 --sizes 50 --output results/closer-v1-n50.publication.jsonl.gz
+bash scripts/pgllm/resume_pgllm.sh
+```
+
+If you changed registry endpoint/model fingerprint, rerun affected cells:
+
+```bash
+bash scripts/pgllm/rerun_pgllm.sh
+```
+
+### Bare OpenAI-compatible model eval
+
+Only change provider credentials and model id:
+
+```bash
+cp .env.example .env
+# set PGLLM_OPENAI_BASE_URL, PGLLM_OPENAI_API_KEY, PGLLM_MODEL_ID
+export PGLLM_REGISTRY=configs/pgllm_gpt55.json
+export PGLLM_MODELS=gpt55
+bash scripts/pgllm/run_openai_model.sh
+```
+
+Or render a registry for any model:
+
+```bash
+python scripts/pgllm/render_model_registry.py > configs/pgllm_active_model.json
+export PGLLM_REGISTRY=configs/pgllm_active_model.json
+export PGLLM_MODELS=gpt55
+bash scripts/pgllm/run_openai_model.sh
+```
+
+Direct listwise proxy through CLOSER (still one PG-LLM call, no full harness):
+
+```bash
+closer-server --config configs/closer.direct.yaml --host 127.0.0.1 --port 8099
+bash scripts/pgllm/run_pgllm.sh
 ```
 
 Do not tune prompts, thresholds, solver, routing, or budget on official evaluation scores.

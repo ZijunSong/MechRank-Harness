@@ -9,15 +9,16 @@ REGISTRY="${PGLLM_REGISTRY:-$ROOT/configs/pgllm_closer_model.json}"
 MODELS="${PGLLM_MODELS:-closer-v1}"
 SIZES="${PGLLM_SIZES:-50}"
 RUN_LABEL="${PGLLM_RUN_LABEL:-}"
+OUTPUT="${PGLLM_EXPORT_OUTPUT:-$ROOT/artifacts/${MODELS// /_}-n${SIZES}.publication.jsonl.gz}"
 
 pgllm_cd
 
 args=(
-  pgllm-score
+  pgllm-export
   --registry "$REGISTRY"
   --models $MODELS
   --sizes $SIZES
-  --breakdown
+  --output "$OUTPUT"
 )
 
 if [[ -n "$RUN_LABEL" ]]; then
@@ -30,3 +31,4 @@ if ((${#extra[@]})); then
 fi
 
 "${args[@]}"
+echo "Wrote $OUTPUT"

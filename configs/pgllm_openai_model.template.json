@@ -1,0 +1,19 @@
+{
+  "models": {
+    "YOUR_MODEL_ALIAS": {
+      "display_name": "YOUR_DISPLAY_NAME",
+      "provider": "openai-compatible",
+      "api_style": "responses",
+      "model_id": "YOUR_PROVIDER_MODEL_ID",
+      "response_model_ids": ["YOUR_PROVIDER_MODEL_ID"],
+      "api_key_env": "PGLLM_OPENAI_API_KEY",
+      "base_url_env": "PGLLM_OPENAI_BASE_URL",
+      "reasoning": "high",
+      "send_reasoning": true,
+      "leaderboard_preset": false,
+      "require_usage": true,
+      "max_tokens": 4096,
+      "ctx": 262144
+    }
+  }
+}

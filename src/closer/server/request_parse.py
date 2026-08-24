@@ -62,6 +62,21 @@ def extract_system_user(body: dict[str, Any]) -> tuple[str, str]:
     return system, "\n".join(user_parts)
 
 
+def extract_max_output_tokens(body: dict[str, Any]) -> int | None:
+    """Read PG-LLM / OpenAI Responses output token limit from the request body."""
+    for key in ("max_output_tokens", "max_completion_tokens"):
+        value = body.get(key)
+        if value is None:
+            continue
+        try:
+            tokens = int(value)
+        except (TypeError, ValueError):
+            continue
+        if tokens > 0:
+            return tokens
+    return None
+
+
 def is_connectivity_probe(system: str, user: str) -> bool:
     sys_l = system.strip().lower()
     user_l = user.strip().lower()
