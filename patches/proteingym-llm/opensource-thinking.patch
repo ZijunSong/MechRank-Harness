@@ -1,0 +1,138 @@
+diff --git a/config/models.py b/config/models.py
+index cbbfa64..0f0f36c 100644
+--- a/config/models.py
++++ b/config/models.py
+@@ -48,6 +48,8 @@ _FIELDS = {
+     "response_model_ids",
+     "service_tier",
+     "leaderboard_preset",
++    "store_reasoning",
++    "chat_extra_body",
+ }
+ 
+ 
+@@ -250,13 +252,25 @@ def validate_model_spec(spec: dict, *, name: str = "request") -> dict:
+         "send_reasoning_effort",
+         "require_usage",
+         "require_reasoning",
++        "store_reasoning",
+         "stream",
+         "leaderboard_preset",
+     ):
+         if field in normalized and not isinstance(normalized[field], bool):
+             raise ValueError(f"model {name!r} {field} must be boolean")
++    if "chat_extra_body" in normalized:
++        if style != "chat":
++            raise ValueError(f"model {name!r} chat_extra_body is only valid for api_style='chat'")
++        extra_body = normalized["chat_extra_body"]
++        if not isinstance(extra_body, dict):
++            raise ValueError(f"model {name!r} chat_extra_body must be an object")
++        try:
++            json.dumps(extra_body)
++        except TypeError as error:
++            raise ValueError(f"model {name!r} chat_extra_body must be JSON-serializable") from error
+     normalized.setdefault("require_usage", False)
+     normalized.setdefault("require_reasoning", False)
++    normalized.setdefault("store_reasoning", True)
+     normalized.setdefault("response_model_ids", [])
+     normalized.setdefault("leaderboard_preset", False)
+     if (
+diff --git a/src/client.py b/src/client.py
+index 3cf7754..a586891 100644
+--- a/src/client.py
++++ b/src/client.py
+@@ -130,6 +130,10 @@ def public_request_descriptor(spec: dict) -> dict:
+         "usage": normalized["require_usage"],
+         "reasoning": normalized["require_reasoning"],
+     }
++    if style == "chat":
++        options["store_reasoning"] = normalized.get("store_reasoning", True)
++        if normalized.get("chat_extra_body"):
++            options["chat_extra_body"] = normalized["chat_extra_body"]
+     return {
+         "descriptor_version": descriptor_version,
+         "provider": "openai-compatible",
+@@ -743,6 +747,56 @@ def _consume_chat_stream(stream: Any) -> dict:
+     }
+ 
+ 
++def _redact_reasoning_chunk(chunk: Any) -> Any:
++    """Remove reasoning fields from one streamed or final chat payload chunk."""
++    if not isinstance(chunk, dict):
++        return chunk
++    redacted = dict(chunk)
++    choices = redacted.get("choices")
++    if not isinstance(choices, list):
++        return redacted
++    sanitized_choices: list[Any] = []
++    for choice in choices:
++        if not isinstance(choice, dict):
++            sanitized_choices.append(choice)
++            continue
++        sanitized_choice = dict(choice)
++        delta = sanitized_choice.get("delta")
++        if isinstance(delta, dict):
++            sanitized_delta = dict(delta)
++            sanitized_delta.pop("reasoning_content", None)
++            sanitized_choice["delta"] = sanitized_delta
++        message = sanitized_choice.get("message")
++        if isinstance(message, dict):
++            sanitized_message = dict(message)
++            sanitized_message.pop("reasoning_content", None)
++            sanitized_choice["message"] = sanitized_message
++        sanitized_choices.append(sanitized_choice)
++    redacted["choices"] = sanitized_choices
++    return redacted
++
++
++def sanitize_response_for_storage(response: dict, *, store_reasoning: bool) -> dict:
++    """Drop reasoning traces from stored provider payloads when configured."""
++    if store_reasoning:
++        return response
++    sanitized = dict(response)
++    sanitized["reasoning_text"] = None
++    content = sanitized.get("response_content")
++    if isinstance(content, list):
++        sanitized["response_content"] = [_redact_reasoning_chunk(item) for item in content]
++    elif isinstance(content, dict):
++        sanitized["response_content"] = _redact_reasoning_chunk(content)
++    provider = sanitized.get("provider_response")
++    if isinstance(provider, dict):
++        provider_copy = dict(provider)
++        chunks = provider_copy.get("chunks")
++        if isinstance(chunks, list):
++            provider_copy["chunks"] = [_redact_reasoning_chunk(item) for item in chunks]
++        sanitized["provider_response"] = provider_copy
++    return sanitized
++
++
+ def _chat_completions(spec: dict, system: str, user: str, timeout: int) -> dict:
+     from openai import OpenAI
+ 
+@@ -762,6 +816,9 @@ def _chat_completions(spec: dict, system: str, user: str, timeout: int) -> dict:
+     kwargs[spec.get("chat_output_token_field", "max_tokens")] = spec["max_tokens"]
+     if spec.get("send_reasoning_effort", True):
+         kwargs["reasoning_effort"] = spec["reasoning"]
++    extra_body = spec.get("chat_extra_body")
++    if isinstance(extra_body, dict) and extra_body:
++        kwargs["extra_body"] = extra_body
+     if spec.get("stream", False):
+         kwargs["stream"] = True
+         kwargs["stream_options"] = {"include_usage": True}
+diff --git a/src/run.py b/src/run.py
+index 9d88dea..89a6641 100644
+--- a/src/run.py
++++ b/src/run.py
+@@ -720,7 +720,12 @@ def record_response(record: dict, response: dict, ids: list[str], subset: list)
+     if not error and not truncated and ranking is None:
+         error = "complete ranking not found"
+     rho = prompt.score_ranking(ranking, ids, subset) if ranking else None
++    inference_options = record.get("request_descriptor", {}).get("inference_options", {})
++    store_reasoning = inference_options.get("store_reasoning", True)
+     reasoning = response.get("reasoning_text")
++    if not store_reasoning:
++        reasoning = None
++        response = client.sanitize_response_for_storage(response, store_reasoning=False)
+     stored_response_content, stored_provider_response = pack_response_payload(
+         response.get("response_content"),
+         provider_response,

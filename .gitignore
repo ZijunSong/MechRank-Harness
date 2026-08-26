@@ -21,3 +21,6 @@ artifacts/*
 
 # Generated per-machine registries
 configs/pgllm_active_model.json
+
+# Runtime logs
+logs/
