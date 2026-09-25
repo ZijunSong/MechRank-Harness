@@ -30,6 +30,24 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def episode_content_hash(episode: Any, *, length: int = 16) -> str:
+    """Hash the full episode payload, including sequences, not just labels."""
+    payload = {
+        "protein_name": episode.protein_name,
+        "organism": episode.organism,
+        "assay_description": episode.assay_description,
+        "higher_is_better": episode.higher_is_better,
+        "wild_type_sequence": episode.wild_type_sequence,
+        "variants": [
+            {"variant_id": variant.variant_id, "sequence": variant.sequence}
+            for variant in episode.variants
+        ],
+        "benchmark_name": episode.benchmark_name,
+    }
+    encoded = orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)
+    return hashlib.sha256(encoded).hexdigest()[:length]
+
+
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

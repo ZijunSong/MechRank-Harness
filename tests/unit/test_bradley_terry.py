@@ -1,3 +1,5 @@
+import pytest
+
 from closer.config import RankingConfig
 from closer.ranking.bradley_terry import fit_bradley_terry, observation_weight
 from closer.ranking.graph import PreferenceGraph
@@ -80,6 +82,28 @@ def test_tie_break_is_lexical_when_scores_equal():
     ids = ["M02", "M01"]
     result = fit_bradley_terry(ids, _graph(ids, []), RankingConfig())
     assert result.ranking == ["M01", "M02"]
+
+
+def test_unknown_observation_id_is_rejected():
+    from closer.errors import RankingSolverError
+
+    ids = ["A", "B"]
+    g = PreferenceGraph()
+    g.add_nodes(ids)
+    g.observations.append(
+        PreferenceObservation(
+            observation_id="ghost",
+            left_id="A",
+            right_id="GHOST",
+            winner="left",
+            confidence=0.8,
+            source="pairwise",
+            round_index=0,
+            rationale="illegal",
+        )
+    )
+    with pytest.raises(RankingSolverError, match="unknown variant"):
+        fit_bradley_terry(ids, g, RankingConfig())
 
 
 def test_weight_mode_neglog():

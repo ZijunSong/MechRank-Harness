@@ -25,11 +25,14 @@ class LazyEngine:
         self._engine: CloserEngine | None = None
         self._client = None
 
-    async def run_episode(self, episode):
+    async def run_episode(self, episode, *, max_output_tokens: int | None = None):
         if self._engine is None:
             self._client = build_llm_client(self.config)
             self._engine = CloserEngine(self.config, self._client, store=self.store)
-        return await self._engine.run_episode(episode)
+        return await self._engine.run_episode(
+            episode,
+            max_output_tokens=max_output_tokens,
+        )
 
     async def aclose(self) -> None:
         if self._client is not None:

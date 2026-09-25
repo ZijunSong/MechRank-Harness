@@ -129,6 +129,8 @@ class OpenAIChatClient(LLMClient):
             body["max_tokens"] = max_output_tokens
         if self.config.base_model.temperature is not None:
             body["temperature"] = self.config.base_model.temperature
+        if self.config.base_model.chat_extra_body:
+            body.update(self.config.base_model.chat_extra_body)
         if extra_body:
             body.update(extra_body)
         call_id = uuid.uuid4().hex[:16]

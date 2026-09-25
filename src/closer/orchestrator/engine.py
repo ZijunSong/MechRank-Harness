@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from closer import TRACE_SCHEMA_VERSION
 from closer.assay.interpreter import AssayInterpreter, deterministic_ablation_contract
 from closer.audit.auditor import AdaptiveAuditor
-from closer.benchmark.pgllm_renderer import SYSTEM_PROMPT, render_user_prompt
-from closer.benchmark.validators import validate_final_ranking
+from closer.benchmark.pgllm_renderer import SYSTEM_PROMPT, render_compact_prompt, render_user_prompt
+from closer.benchmark.validators import parse_ranking_from_text, validate_final_ranking
 from closer.comparison.reasoner import ComparativeReasoner
 from closer.comparison.scheduler import ComparisonScheduler, bridge_pairs
 from closer.config import CloserConfig
-from closer.errors import GraphConnectivityError
+from closer.errors import ConfigError, GraphConnectivityError
 from closer.evidence.analyzer import MechanisticAnalyzer, placeholder_uncertain_states
 from closer.evidence.state import EpisodeEvidenceState
 from closer.llm.base import LLMClient
-from closer.logging import RunStore, append_jsonl, dump_json, sha256_text
+from closer.logging import RunStore, append_jsonl, dump_json, episode_content_hash
 from closer.metrics.closure import collect_diagnostics
 from closer.metrics.efficiency import efficiency_snapshot
 from closer.mutation.compiler import compile_episode_mutations
@@ -52,16 +53,21 @@ class CloserEngine:
         *,
         max_output_tokens: int | None = None,
     ) -> CloserResult:
-        budget = BudgetManager(self.config.budget)
-        episode_id = sha256_text(
-            episode.protein_name + episode.assay_description + "".join(episode.variant_ids())
-        )[:16]
+        started = time.perf_counter()
+        budget_cfg = self.config.budget.model_copy()
+        if max_output_tokens is not None:
+            budget_cfg.max_total_output_tokens = min(
+                budget_cfg.max_total_output_tokens, max_output_tokens
+            )
+        budget = BudgetManager(budget_cfg)
+        episode_id = episode_content_hash(episode)
         ep_dir = self.store.episode_dir(episode_id) if self.store else None
         if ep_dir is not None:
             self.client.trace_dir = ep_dir / "llm_calls"  # type: ignore[attr-defined]
             dump_json(ep_dir / "input.json", {"schema_version": TRACE_SCHEMA_VERSION, **episode.model_dump()})
 
-        if self.config.ablation.mutation_compiler:
+        force_mutations = self.config.execution.mode in {"listwise_min", "listwise_compact"}
+        if self.config.ablation.mutation_compiler or force_mutations:
             profiles = compile_episode_mutations(episode)
         else:
             from closer.schemas.mutation import VariantMutationProfile
@@ -110,14 +116,32 @@ class CloserEngine:
         if ep_dir is not None:
             state.save_json(ep_dir / "evidence_states.json")
 
-        if not self.config.ablation.comparative_reasoning:
-            result = await self._direct_rank_path(
-                episode,
-                state,
-                budget,
-                ep_dir,
-                max_output_tokens=max_output_tokens,
-            )
+        mode = self.config.execution.mode
+        if mode == "listwise_refine":
+            raise ConfigError("listwise_refine is not implemented yet; use listwise_min or listwise_compact")
+        one_call = mode in {"direct_proxy", "listwise_min", "listwise_compact"} or (
+            not self.config.ablation.comparative_reasoning
+        )
+        if one_call:
+            if mode == "direct_proxy":
+                result = await self._direct_proxy_path(
+                    episode, state, budget, ep_dir, max_output_tokens=max_output_tokens
+                )
+            elif mode == "listwise_compact":
+                result = await self._listwise_compact_path(
+                    episode, state, budget, ep_dir, max_output_tokens=max_output_tokens
+                )
+            else:
+                result = await self._direct_rank_path(
+                    episode,
+                    state,
+                    budget,
+                    ep_dir,
+                    max_output_tokens=max_output_tokens,
+                )
+            result.diagnostics["episode_wall_ms"] = (time.perf_counter() - started) * 1000
+            result.diagnostics["sum_request_latency_ms"] = result.usage.get("latency_ms")
+            result.diagnostics["execution_mode"] = mode
             return result
 
         graph = PreferenceGraph()
@@ -174,6 +198,9 @@ class CloserEngine:
             cycle_count_before=cycle_before,
             config=self.config.audit,
         )
+        diagnostics["episode_wall_ms"] = (time.perf_counter() - started) * 1000
+        diagnostics["sum_request_latency_ms"] = usage.get("latency_ms")
+        diagnostics["execution_mode"] = "legacy_graph"
         result = CloserResult(
             ranking=ranking,
             scores=after.scores,
@@ -282,6 +309,75 @@ class CloserEngine:
         scores = {vid: float(len(ranking) - i) for i, vid in enumerate(ranking)}
         usage = efficiency_snapshot(budget)
         diagnostics = {"mode": "direct_rank", **usage}
+        result = CloserResult(
+            ranking=ranking,
+            scores=scores,
+            assay_contract=state.assay_contract,
+            diagnostics=diagnostics,
+            usage=usage,
+            trace_path=str(ep_dir) if ep_dir else "",
+        )
+        if ep_dir is not None:
+            dump_json(ep_dir / "final_result.json", result.model_dump(mode="json"))
+            dump_json(ep_dir / "diagnostics.json", diagnostics)
+        return result
+
+    async def _direct_proxy_path(
+        self,
+        episode: ProteinEpisode,
+        state: EpisodeEvidenceState,
+        budget,
+        ep_dir: Path | None,
+        *,
+        max_output_tokens: int | None = None,
+    ) -> CloserResult:
+        user = episode.raw_user_prompt or render_user_prompt(episode)
+        text, _trace = await self.client.generate_text(
+            stage="direct_proxy",
+            system=episode.system_prompt or SYSTEM_PROMPT,
+            user=user,
+            budget=budget,
+            max_output_tokens=max_output_tokens,
+        )
+        ranking = validate_final_ranking(episode, parse_ranking_from_text(text))
+        scores = {vid: float(len(ranking) - i) for i, vid in enumerate(ranking)}
+        usage = efficiency_snapshot(budget)
+        diagnostics = {"mode": "direct_proxy", **usage}
+        result = CloserResult(
+            ranking=ranking,
+            scores=scores,
+            assay_contract=state.assay_contract,
+            diagnostics=diagnostics,
+            usage=usage,
+            trace_path=str(ep_dir) if ep_dir else "",
+        )
+        if ep_dir is not None:
+            dump_json(ep_dir / "final_result.json", result.model_dump(mode="json"))
+            dump_json(ep_dir / "diagnostics.json", diagnostics)
+        return result
+
+    async def _listwise_compact_path(
+        self,
+        episode: ProteinEpisode,
+        state: EpisodeEvidenceState,
+        budget,
+        ep_dir: Path | None,
+        *,
+        max_output_tokens: int | None = None,
+    ) -> CloserResult:
+        user = render_compact_prompt(episode, state.mutation_profiles)
+        parsed, _trace = await self.client.generate_structured(
+            stage="listwise_compact",
+            schema=RankingJSON,
+            system=episode.system_prompt or SYSTEM_PROMPT,
+            user=user,
+            budget=budget,
+            max_output_tokens=max_output_tokens,
+        )
+        ranking = validate_final_ranking(episode, parsed.ranking)
+        scores = {vid: float(len(ranking) - i) for i, vid in enumerate(ranking)}
+        usage = efficiency_snapshot(budget)
+        diagnostics = {"mode": "listwise_compact", **usage}
         result = CloserResult(
             ranking=ranking,
             scores=scores,

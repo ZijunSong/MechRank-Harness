@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from closer.comparison import prompts
+from closer.comparison.validation import normalize_requested_pair, validate_setwise_ranking
 from closer.errors import ComparisonError, StructuredOutputError
 from closer.evidence.state import EpisodeEvidenceState
 from closer.llm.base import LLMClient
@@ -35,13 +36,7 @@ class ComparativeReasoner:
             raise ComparisonError(str(exc)) from exc
         if not isinstance(parsed, SetwiseRanking):
             raise ComparisonError("setwise reasoner returned the wrong schema")
-        if set(parsed.ranking) != set(variant_ids) or len(parsed.ranking) != len(variant_ids):
-            raise ComparisonError(
-                f"setwise ranking mismatch: requested={variant_ids} got={parsed.ranking}"
-            )
-        if set(parsed.variant_ids) != set(variant_ids):
-            parsed = parsed.model_copy(update={"variant_ids": list(variant_ids)})
-        return parsed
+        return validate_setwise_ranking(parsed, variant_ids)
 
     async def compare_pair(
         self,
@@ -63,4 +58,4 @@ class ComparativeReasoner:
             raise ComparisonError(str(exc)) from exc
         if not isinstance(parsed, PairPreference):
             raise ComparisonError("pairwise reasoner returned the wrong schema")
-        return parsed.model_copy(update={"left_id": left_id, "right_id": right_id})
+        return normalize_requested_pair(parsed, left_id, right_id)

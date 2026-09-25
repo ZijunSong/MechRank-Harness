@@ -65,6 +65,60 @@ def test_bad_prompt_is_400(client):
     assert resp.status_code == 400
 
 
+def test_full_ranking_requests_pass_token_limits(monkeypatch):
+    """Offline Chat/Responses ranking path: no real model, not just the OK probe."""
+    from tests.fixtures.episodes import synthetic_episode
+
+    from closer.assay.interpreter import deterministic_ablation_contract
+    from closer.schemas.ranking import CloserResult
+
+    captured: dict[str, object] = {}
+
+    async def fake_run(self, episode, *, max_output_tokens=None):
+        captured["max_output_tokens"] = max_output_tokens
+        captured["n_variants"] = len(episode.variants)
+        ranking = list(episode.variant_ids())
+        return CloserResult(
+            ranking=ranking,
+            scores={vid: float(len(ranking) - i) for i, vid in enumerate(ranking)},
+            assay_contract=deterministic_ablation_contract(episode),
+            diagnostics={},
+            usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+            trace_path="",
+        )
+
+    monkeypatch.setattr("closer.server.app.LazyEngine.run_episode", fake_run)
+    prompt = ranking_v1_prompt(4)
+    with TestClient(create_app()) as test_client:
+        responses = test_client.post(
+            "/v1/responses",
+            json={
+                "model": "closer-v1",
+                "instructions": SYSTEM_PROMPT,
+                "input": prompt,
+                "max_output_tokens": 4096,
+            },
+        )
+        assert responses.status_code == 200, responses.text
+        assert captured["max_output_tokens"] == 4096
+        assert captured["n_variants"] == 4
+        chat = test_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "closer-v1",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": 2048,
+            },
+        )
+        assert chat.status_code == 200, chat.text
+        assert captured["max_output_tokens"] == 2048
+        assert "ranking" in chat.json()["choices"][0]["message"]["content"]
+    assert len(synthetic_episode(4).variants) == 4
+
+
 @skip_full_e2e
 def test_synthetic_ranking_v1_e2e(client):
     prompt = ranking_v1_prompt(10)

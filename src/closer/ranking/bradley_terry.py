@@ -39,10 +39,15 @@ def fit_bradley_terry(
     losers: list[int] = []
     weights: list[float] = []
     n_obs = 0
-    for obs in graph.observations:
+    observations = graph.active_observations() if hasattr(graph, "active_observations") else graph.observations
+    for obs in observations:
         n_obs += 1
         if obs.winner == "uncertain":
             continue
+        if obs.left_id not in index or obs.right_id not in index:
+            raise RankingSolverError(
+                f"unknown variant id in observation: {obs.left_id!r}/{obs.right_id!r}"
+            )
         if obs.winner == "tie":
             if config.tie_mode == "ignore":
                 continue

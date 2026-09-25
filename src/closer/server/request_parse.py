@@ -62,19 +62,39 @@ def extract_system_user(body: dict[str, Any]) -> tuple[str, str]:
     return system, "\n".join(user_parts)
 
 
+_TOKEN_LIMIT_KEYS = ("max_output_tokens", "max_completion_tokens", "max_tokens")
+
+
 def extract_max_output_tokens(body: dict[str, Any]) -> int | None:
-    """Read PG-LLM / OpenAI Responses output token limit from the request body."""
-    for key in ("max_output_tokens", "max_completion_tokens"):
-        value = body.get(key)
-        if value is None:
+    """Read a single output-token limit from Chat / Responses request bodies.
+
+    Supported keys: max_output_tokens, max_completion_tokens, max_tokens.
+    Illegal types and conflicting positive values raise BenchmarkParseError.
+    Zero or omitted values mean "no request-level limit".
+    """
+    from closer.errors import BenchmarkParseError
+
+    found: dict[str, int] = {}
+    for key in _TOKEN_LIMIT_KEYS:
+        if key not in body or body[key] is None:
             continue
-        try:
-            tokens = int(value)
-        except (TypeError, ValueError):
+        value = body[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise BenchmarkParseError(f"{key} must be a positive integer")
+        tokens = int(value)
+        if tokens != value:
+            raise BenchmarkParseError(f"{key} must be a positive integer")
+        if tokens == 0:
             continue
-        if tokens > 0:
-            return tokens
-    return None
+        if tokens < 0:
+            raise BenchmarkParseError(f"{key} must be a positive integer")
+        found[key] = tokens
+    if not found:
+        return None
+    values = set(found.values())
+    if len(values) > 1:
+        raise BenchmarkParseError(f"conflicting token limits: {found}")
+    return next(iter(values))
 
 
 def is_connectivity_probe(system: str, user: str) -> bool:

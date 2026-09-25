@@ -45,3 +45,7 @@ class PreferenceObservation(BaseModel):
     rationale: str
     key_evidence: list[str] = Field(default_factory=list)
     contradiction_with_previous_evidence: bool = False
+    comparison_event_id: str | None = None
+    derived_from_order: bool = False
+    revision_of: str | None = None
+    status: Literal["active", "superseded"] = "active"

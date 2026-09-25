@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from closer.audit import prompts
-from closer.audit.detector import AuditItem, detect_audit_items
+from closer.audit.detector import AuditItem, detect_audit_items, select_pair_audit_items
+from closer.comparison.validation import normalize_pair_from_allowed_set, normalize_requested_pair
 from closer.config import AuditConfig
 from closer.errors import AuditError, StructuredOutputError
 from closer.evidence.state import EpisodeEvidenceState
@@ -41,8 +42,7 @@ class AdaptiveAuditor:
                 solver=current,
                 config=self.config,
             )
-            items = [item for item in items if item.priority >= self.config.min_priority]
-            selected = items[: self.config.max_items_per_round]
+            selected = select_pair_audit_items(items, self.config)
             if not selected:
                 history.append({"round": round_index, "n_items": 0, "stop": "no_high_priority_items"})
                 break
@@ -78,6 +78,8 @@ class AdaptiveAuditor:
         solver: SolverResult,
         budget: BudgetManager | None,
     ) -> PairPreference:
+        if item.kind == "epistasis" or len(item.variant_ids) < 2:
+            raise AuditError("single-variant audit cannot produce a pair preference")
         try:
             parsed, _trace = await self.client.generate_structured(
                 stage="adaptive_auditor",
@@ -90,7 +92,7 @@ class AdaptiveAuditor:
             raise AuditError(str(exc)) from exc
         if not isinstance(parsed, PairPreference):
             raise AuditError("auditor returned the wrong schema")
-        if len(item.variant_ids) >= 2:
+        if len(item.variant_ids) == 2:
             left, right = item.variant_ids[0], item.variant_ids[1]
-            parsed = parsed.model_copy(update={"left_id": left, "right_id": right})
-        return parsed
+            return normalize_requested_pair(parsed, left, right)
+        return normalize_pair_from_allowed_set(parsed, item.variant_ids)

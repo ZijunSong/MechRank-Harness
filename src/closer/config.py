@@ -10,7 +10,7 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from closer.errors import ConfigError
 
@@ -33,6 +33,7 @@ class BaseModelConfig(BaseModel):
     temperature: float | None = None
     reasoning_effort: str = "high"
     require_usage: bool = False
+    chat_extra_body: dict[str, Any] = Field(default_factory=dict)
 
 
 class ServerConfig(BaseModel):
@@ -92,6 +93,20 @@ class AuditConfig(BaseModel):
     min_priority: float = 0.25
     evidence_conflict_min_confidence: float = 0.75
 
+    @field_validator("low_margin_threshold")
+    @classmethod
+    def _threshold_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("audit.low_margin_threshold must be > 0")
+        return value
+
+    @field_validator("min_priority")
+    @classmethod
+    def _min_priority_bounded(cls, value: float) -> float:
+        if value < 0 or value > 1:
+            raise ValueError("audit.min_priority must be in [0, 1]")
+        return value
+
 
 class BudgetConfig(BaseModel):
     max_total_llm_calls: int = 80
@@ -114,6 +129,25 @@ class AblationConfig(BaseModel):
     adaptive_audit: bool = True
 
 
+class ExecutionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal[
+        "direct_proxy",
+        "listwise_min",
+        "listwise_compact",
+        "listwise_refine",
+        "legacy_graph",
+    ] = "legacy_graph"
+
+
+class RefinementConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    max_batches: int = 1
+    max_pairs_per_batch: int = 8
+    max_repeats_per_pair: int = 0
+
+
 class CloserConfig(BaseModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     base_model: BaseModelConfig = Field(default_factory=BaseModelConfig)
@@ -127,7 +161,25 @@ class CloserConfig(BaseModel):
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ablation: AblationConfig = Field(default_factory=AblationConfig)
+    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
+    refinement: RefinementConfig = Field(default_factory=RefinementConfig)
     source_path: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_ablation_combinations(self) -> CloserConfig:
+        if (
+            self.ablation.adaptive_audit
+            and self.audit.enabled
+            and not self.ablation.global_solver
+            and self.execution.mode == "legacy_graph"
+        ):
+            raise ValueError(
+                "adaptive_audit requires global_solver; otherwise the auditor "
+                "would silently switch from Borda to Bradley-Terry"
+            )
+        if self.execution.mode == "listwise_refine" and not self.refinement.enabled:
+            raise ValueError("execution.mode=listwise_refine requires refinement.enabled=true")
+        return self
 
     @field_validator("evidence")
     @classmethod

@@ -1,0 +1,21 @@
+{
+  "models": {
+    "closer-v2-min-think": {
+      "display_name": "CLOSER v2-min (thinking)",
+      "provider": "openai-compatible",
+      "api_style": "responses",
+      "model_id": "closer-v2-min-think",
+      "response_model_ids": ["closer-v2-min-think"],
+      "api_key_env": "PGLLM_CLOSER_API_KEY",
+      "base_url_env": "PGLLM_CLOSER_BASE_URL",
+      "reasoning": "xhigh",
+      "send_reasoning": true,
+      "leaderboard_preset": true,
+      "require_usage": true,
+      "require_reasoning": false,
+      "store_reasoning": false,
+      "max_tokens": 86016,
+      "ctx": 131072
+    }
+  }
+}

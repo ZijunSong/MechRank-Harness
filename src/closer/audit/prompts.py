@@ -19,7 +19,9 @@ Your job:
 5. Explain the repair.
 
 Do not recall experimental labels. Return JSON matching PairPreference.
-If more than two variants are involved, compare the two that most likely cause the conflict
+If exactly two variants are listed, compare those two and keep their ids in left_id and right_id.
+Do not introduce any other variant id.
+If more than two variants are involved, compare two distinct ids from that set only
 and put them in left_id and right_id.
 """
 
